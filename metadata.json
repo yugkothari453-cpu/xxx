@@ -1,0 +1,6 @@
+{
+  "name": "Royal Gambit — The Crown Race",
+  "description": "Outwit your rival. Claim the throne. A royal turn-based tactical pawn racing and rampart placement strategy game.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
