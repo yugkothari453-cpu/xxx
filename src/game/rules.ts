@@ -148,9 +148,17 @@ export function isWallCollision(wall: Wall, existingWalls: Wall[]): boolean {
 }
 
 export function getLegalMoves(player: PlayerId, state: GameState): CellPosition[] {
-  const current = state.players[player].position;
+  if (state.winner || state.status === 'completed' || state.status === 'waiting') {
+    return [];
+  }
+
+  const current = state.players[player]?.position;
+  if (!current || !isWithinBoard(current.row, current.col)) {
+    return [];
+  }
+
   const opponentId: PlayerId = player === 'blue' ? 'crimson' : 'blue';
-  const opponent = state.players[opponentId].position;
+  const opponent = state.players[opponentId]?.position;
   const legal: CellPosition[] = [];
 
   const directions = [
@@ -173,7 +181,7 @@ export function getLegalMoves(player: PlayerId, state: GameState): CellPosition[
     }
 
     // Is opponent occupying next cell?
-    if (nextRow === opponent.row && nextCol === opponent.col) {
+    if (opponent && nextRow === opponent.row && nextCol === opponent.col) {
       // Try straight jump
       const straightRow = nextRow + dir.dr;
       const straightCol = nextCol + dir.dc;
@@ -229,6 +237,8 @@ export function getShortestPath(
   goalRow: number,
   walls: Wall[]
 ): CellPosition[] | null {
+  const safeWalls = Array.isArray(walls) ? walls : [];
+
   if (
     !start ||
     typeof start !== 'object' ||
@@ -265,7 +275,7 @@ export function getShortestPath(
       const nc = pos.col + dir.dc;
 
       if (isWithinBoard(nr, nc) && !visited[nr][nc]) {
-        if (!isEdgeBlocked(pos.row, pos.col, nr, nc, walls)) {
+        if (!isEdgeBlocked(pos.row, pos.col, nr, nc, safeWalls)) {
           visited[nr][nc] = true;
           queue.push({
             pos: { row: nr, col: nc },
@@ -283,6 +293,18 @@ export function validateWallPlacement(
   wall: Wall,
   state: GameState
 ): { valid: boolean; reason?: string } {
+  if (!state || typeof state !== 'object') {
+    return { valid: false, reason: 'Invalid game state.' };
+  }
+
+  if (state.winner || state.status === 'completed') {
+    return { valid: false, reason: 'Match is already concluded.' };
+  }
+
+  if (state.status === 'waiting') {
+    return { valid: false, reason: 'Match is waiting for both players to enter.' };
+  }
+
   if (!wall || typeof wall !== 'object') {
     return { valid: false, reason: 'Invalid rampart data.' };
   }
@@ -295,7 +317,8 @@ export function validateWallPlacement(
     return { valid: false, reason: 'Rampart position is outside the royal board limits.' };
   }
 
-  const player = state.players[wall.placedBy];
+  const placingPlayer = wall.placedBy || state.turn;
+  const player = state.players[placingPlayer];
   if (!player) {
     return { valid: false, reason: 'Invalid player for rampart placement.' };
   }
@@ -389,11 +412,12 @@ export function applyAction(
       return { state, valid: false, reason: 'Illegal pawn move.' };
     }
 
+    const nextPosition = { row: action.to.row, col: action.to.col };
     const nextPlayers = {
       ...state.players,
       [action.player]: {
         ...state.players[action.player],
-        position: action.to,
+        position: nextPosition,
       },
     };
 
@@ -409,6 +433,12 @@ export function applyAction(
     }
 
     const nextTurn: PlayerId = action.player === 'blue' ? 'crimson' : 'blue';
+    const recordAction: GameAction = {
+      type: 'move',
+      player: action.player,
+      to: nextPosition,
+      timestamp: action.timestamp || Date.now(),
+    };
 
     return {
       valid: true,
@@ -420,7 +450,7 @@ export function applyAction(
         winnerReason,
         status,
         completedAt: winner ? Date.now() : undefined,
-        moveHistory: [...state.moveHistory, action],
+        moveHistory: [...state.moveHistory, recordAction],
       },
     };
   }
@@ -430,11 +460,19 @@ export function applyAction(
       return { state, valid: false, reason: 'Missing rampart data.' };
     }
 
-    if (action.wall.placedBy !== action.player) {
+    if (action.wall.placedBy && action.wall.placedBy !== action.player) {
       return { state, valid: false, reason: 'Rampart placedBy does not match active player.' };
     }
 
-    const validation = validateWallPlacement(action.wall, state);
+    const nextWall: Wall = {
+      id: action.wall.id || `kot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      row: action.wall.row,
+      col: action.wall.col,
+      orientation: action.wall.orientation,
+      placedBy: action.player,
+    };
+
+    const validation = validateWallPlacement(nextWall, state);
     if (!validation.valid) {
       return { state, valid: false, reason: validation.reason };
     }
@@ -448,15 +486,21 @@ export function applyAction(
     };
 
     const nextTurn: PlayerId = action.player === 'blue' ? 'crimson' : 'blue';
+    const recordAction: GameAction = {
+      type: 'wall',
+      player: action.player,
+      wall: nextWall,
+      timestamp: action.timestamp || Date.now(),
+    };
 
     return {
       valid: true,
       state: {
         ...state,
         players: nextPlayers,
-        walls: [...state.walls, action.wall],
+        walls: [...state.walls, nextWall],
         turn: nextTurn,
-        moveHistory: [...state.moveHistory, action],
+        moveHistory: [...state.moveHistory, recordAction],
       },
     };
   }

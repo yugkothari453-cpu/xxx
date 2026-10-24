@@ -598,3 +598,252 @@ test('applyAction rejects moves when game state is in waiting status', () => {
   assert.equal(res.valid, false);
   assert.match(res.reason!, /waiting for both players/i);
 });
+
+// ==========================================
+// 8. EXHAUSTIVE AUDIT SUITE
+// ==========================================
+
+test('AUDIT: Corner movements correctly restrict to available in-bound orthogonal moves', () => {
+  let state = createInitialGameState();
+  // Place Blue in top-left corner (0, 0), Crimson far away at (8, 8)
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, position: { row: 0, col: 0 } },
+      crimson: { ...state.players.crimson, position: { row: 8, col: 8 } },
+    },
+    turn: 'blue',
+  };
+
+  const moves = getLegalMoves('blue', state);
+  // From (0, 0): Only Right (0, 1) and Down (1, 0)
+  assert.equal(moves.length, 2);
+  assert.ok(moves.some((m) => m.row === 0 && m.col === 1));
+  assert.ok(moves.some((m) => m.row === 1 && m.col === 0));
+
+  // Place Crimson in bottom-right corner (8, 8)
+  const crimsonMoves = getLegalMoves('crimson', state);
+  // From (8, 8): Only Left (8, 7) and Up (7, 8)
+  assert.equal(crimsonMoves.length, 2);
+  assert.ok(crimsonMoves.some((m) => m.row === 8 && m.col === 7));
+  assert.ok(crimsonMoves.some((m) => m.row === 7 && m.col === 8));
+});
+
+test('AUDIT: Horizontal pawn jumping and diagonal jumps when horizontal straight jump is blocked', () => {
+  let state = createInitialGameState();
+  // Blue at (4, 4), Crimson side-by-side at (4, 5)
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, position: { row: 4, col: 4 } },
+      crimson: { ...state.players.crimson, position: { row: 4, col: 5 } },
+    },
+    turn: 'blue',
+  };
+
+  // 1. Unblocked horizontal straight jump to (4, 6)
+  const openMoves = getLegalMoves('blue', state);
+  assert.ok(openMoves.some((m) => m.row === 4 && m.col === 6), 'Horizontal straight jump should be legal');
+  assert.equal(openMoves.some((m) => m.row === 3 && m.col === 5), false, 'Diagonal jumps disallowed when straight jump is open');
+  assert.equal(openMoves.some((m) => m.row === 5 && m.col === 5), false, 'Diagonal jumps disallowed when straight jump is open');
+
+  // 2. Block horizontal straight jump with vertical wall at (3, 5) [which covers rows 3 and 4 along col 5]
+  const wallRight: Wall = { id: 'wr', row: 3, col: 5, orientation: 'V', placedBy: 'crimson' };
+  const blockedState = { ...state, walls: [wallRight] };
+  const blockedMoves = getLegalMoves('blue', blockedState);
+
+  assert.equal(blockedMoves.some((m) => m.row === 4 && m.col === 6), false, 'Straight jump blocked by wall');
+  // Both Up (3, 5) and Down (5, 5) diagonal jumps should now be legal!
+  assert.ok(blockedMoves.some((m) => m.row === 3 && m.col === 5), 'Up diagonal jump should be legal');
+  assert.ok(blockedMoves.some((m) => m.row === 5 && m.col === 5), 'Down diagonal jump should be legal');
+});
+
+test('AUDIT: Trapped opponent with straight jump and both diagonal jumps blocked yields no jumps', () => {
+  let state = createInitialGameState();
+  // Blue at (4, 4), Crimson at (5, 4).
+  // Wall 1: Horizontal wall behind Crimson at row 5, col 4 -> blocks straight jump (6, 4)
+  // Wall 2: Vertical wall at row 5, col 3 -> blocks left diagonal (5, 3)
+  // Wall 3: Vertical wall at row 5, col 4 -> blocks right diagonal (5, 5)
+  const wBehind: Wall = { id: 'wb', row: 5, col: 4, orientation: 'H', placedBy: 'crimson' };
+  const wLeft: Wall = { id: 'wl', row: 5, col: 3, orientation: 'V', placedBy: 'crimson' };
+  const wRight: Wall = { id: 'wr', row: 5, col: 4, orientation: 'V', placedBy: 'crimson' };
+
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, position: { row: 4, col: 4 } },
+      crimson: { ...state.players.crimson, position: { row: 5, col: 4 } },
+    },
+    walls: [wBehind, wLeft, wRight],
+    turn: 'blue',
+  };
+
+  const moves = getLegalMoves('blue', state);
+  // Straight jump (6, 4) must be absent
+  assert.equal(moves.some((m) => m.row === 6 && m.col === 4), false);
+  // Both diagonal jumps must be absent
+  assert.equal(moves.some((m) => m.row === 5 && m.col === 3), false);
+  assert.equal(moves.some((m) => m.row === 5 && m.col === 5), false);
+
+  // Normal retreats Up (3, 4), Left (4, 3), Right (4, 5) remain valid
+  assert.ok(moves.some((m) => m.row === 3 && m.col === 4));
+  assert.ok(moves.some((m) => m.row === 4 && m.col === 3));
+  assert.ok(moves.some((m) => m.row === 4 && m.col === 5));
+});
+
+test('AUDIT: Straight jump landing directly on goal row awards instant victory', () => {
+  let state = createInitialGameState();
+  // Blue at row 6, col 4; Crimson at row 7, col 4.
+  // Straight jump lands on row 8, col 4 (Blue goal row!)
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, position: { row: 6, col: 4 } },
+      crimson: { ...state.players.crimson, position: { row: 7, col: 4 } },
+    },
+    turn: 'blue',
+  };
+
+  const jumpMove: GameAction = {
+    type: 'move',
+    player: 'blue',
+    to: { row: 8, col: 4 },
+    timestamp: Date.now(),
+  };
+
+  const result = applyAction(state, jumpMove);
+  assert.ok(result.valid);
+  assert.equal(result.state.winner, 'blue');
+  assert.equal(result.state.status, 'completed');
+  assert.equal(result.state.winnerReason, 'goal_reached');
+  assert.equal(result.state.players.blue.position.row, 8);
+  assert.equal(result.state.players.blue.position.col, 4);
+});
+
+test('AUDIT: Diagonal jump landing directly on goal row awards instant victory', () => {
+  let state = createInitialGameState();
+  // Blue at row 7, col 4; Crimson at row 8, col 4 (on Blue goal row).
+  // Straight jump to (9, 4) is blocked by board boundary.
+  // Diagonal jumps to (8, 3) and (8, 5) are legal and BOTH on row 8 (goal row!)
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, position: { row: 7, col: 4 } },
+      crimson: { ...state.players.crimson, position: { row: 8, col: 4 } },
+    },
+    turn: 'blue',
+  };
+
+  const diagWinMove: GameAction = {
+    type: 'move',
+    player: 'blue',
+    to: { row: 8, col: 3 },
+    timestamp: Date.now(),
+  };
+
+  const result = applyAction(state, diagWinMove);
+  assert.ok(result.valid);
+  assert.equal(result.state.winner, 'blue');
+  assert.equal(result.state.status, 'completed');
+  assert.equal(result.state.winnerReason, 'goal_reached');
+  assert.equal(result.state.players.blue.position.row, 8);
+  assert.equal(result.state.players.blue.position.col, 3);
+});
+
+test('AUDIT: Wall placement validation rejects completed or waiting games', () => {
+  let state = createInitialGameState();
+  state = { ...state, status: 'completed', winner: 'blue' };
+
+  const testWall: Wall = { id: 'w_test', row: 2, col: 2, orientation: 'H', placedBy: 'crimson' };
+  const res = validateWallPlacement(testWall, state);
+  assert.equal(res.valid, false);
+  assert.match(res.reason!, /already concluded/i);
+
+  state = { ...createInitialGameState(), status: 'waiting' };
+  const resWait = validateWallPlacement(testWall, state);
+  assert.equal(resWait.valid, false);
+  assert.match(resWait.reason!, /waiting for both players/i);
+});
+
+test('AUDIT: getLegalMoves returns empty array for completed or waiting games', () => {
+  let state = createInitialGameState();
+  state = { ...state, status: 'completed', winner: 'blue' };
+  assert.deepEqual(getLegalMoves('blue', state), []);
+  assert.deepEqual(getLegalMoves('crimson', state), []);
+
+  state = { ...createInitialGameState(), status: 'waiting' };
+  assert.deepEqual(getLegalMoves('blue', state), []);
+  assert.deepEqual(getLegalMoves('crimson', state), []);
+});
+
+test('AUDIT: Player with 0 walls can still move pawns freely while wall placement is blocked', () => {
+  let state = createInitialGameState();
+  state = {
+    ...state,
+    players: {
+      ...state.players,
+      blue: { ...state.players.blue, wallsRemaining: 0, position: { row: 2, col: 4 } },
+      crimson: { ...state.players.crimson, wallsRemaining: 5 },
+    },
+    turn: 'blue',
+  };
+
+  // Wall placement must fail
+  const wallAction: GameAction = {
+    type: 'wall',
+    player: 'blue',
+    wall: { id: 'w_fail', row: 3, col: 3, orientation: 'H', placedBy: 'blue' },
+    timestamp: Date.now(),
+  };
+  const wallRes = applyAction(state, wallAction);
+  assert.equal(wallRes.valid, false);
+  assert.match(wallRes.reason!, /exhausted/i);
+
+  // Pawn move must succeed
+  const moveAction: GameAction = {
+    type: 'move',
+    player: 'blue',
+    to: { row: 3, col: 4 },
+    timestamp: Date.now(),
+  };
+  const moveRes = applyAction(state, moveAction);
+  assert.ok(moveRes.valid);
+  assert.equal(moveRes.state.players.blue.position.row, 3);
+  assert.equal(moveRes.state.players.blue.position.col, 4);
+  assert.equal(moveRes.state.players.blue.wallsRemaining, 0);
+  assert.equal(moveRes.state.players.crimson.wallsRemaining, 5);
+  assert.equal(moveRes.state.turn, 'crimson');
+});
+
+test('AUDIT: Snaking maze with complex corridors leaves legal path open', () => {
+  let state = createInitialGameState();
+  // Create a snaking maze wall structure
+  const mazeWalls: Wall[] = [
+    { id: 'm1', row: 1, col: 0, orientation: 'H', placedBy: 'crimson' },
+    { id: 'm2', row: 1, col: 2, orientation: 'H', placedBy: 'crimson' },
+    { id: 'm3', row: 1, col: 4, orientation: 'H', placedBy: 'crimson' },
+    { id: 'm4', row: 1, col: 6, orientation: 'H', placedBy: 'crimson' }, // Only col 8 open on row 1
+    { id: 'm5', row: 3, col: 1, orientation: 'H', placedBy: 'crimson' },
+    { id: 'm6', row: 3, col: 3, orientation: 'H', placedBy: 'crimson' },
+    { id: 'm7', row: 3, col: 5, orientation: 'H', placedBy: 'crimson' }, // Only col 0 open on row 3
+  ];
+
+  state = { ...state, walls: mazeWalls, turn: 'blue' };
+
+  // Blue at (0, 4) can still find a path to row 8 through the snaking openings
+  const path = getShortestPath(state.players.blue.position, state.players.blue.goalRow, state.walls);
+  assert.ok(path !== null, 'Path should exist through snaking maze');
+  assert.equal(path[0].row, 0);
+  assert.equal(path[path.length - 1].row, 8);
+
+  // A wall that does NOT block the remaining opening is valid
+  const benignWall: Wall = { id: 'b', row: 5, col: 4, orientation: 'H', placedBy: 'blue' };
+  const validRes = validateWallPlacement(benignWall, state);
+  assert.ok(validRes.valid);
+});
+
