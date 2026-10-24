@@ -18,6 +18,9 @@ import { GameBoard } from './components/GameBoard';
 import { PlayerDashboard } from './components/PlayerDashboard';
 import { GameResultModal } from './components/GameResultModal';
 import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { useWallDrag } from './game/useWallDrag';
+import { WallDragOverlay } from './components/WallDragOverlay';
+import { Shield, GripHorizontal } from 'lucide-react';
 
 type AppScreen = 'home' | 'match';
 
@@ -285,6 +288,26 @@ export default function App() {
     }
   }, [screen, gameMode, gameState.turn, gameState.winner, difficulty]);
 
+  const isBoardDisabled = isAiThinking || gameState.winner !== null;
+
+  const {
+    orientationChoice,
+    setOrientationChoice,
+    dragState,
+    startDrag,
+    draggedBoardPreview,
+  } = useWallDrag({
+    gameState,
+    myPlayerRole,
+    disabled: isBoardDisabled,
+    onPlaceWall: handlePlaceWall,
+    onInvalidAction: showStatus,
+  });
+
+  const isMyTurn = !isBoardDisabled && (myPlayerRole === null || gameState.turn === myPlayerRole);
+  const currentTurnPlayer = gameState.players[gameState.turn];
+  const hasWallsRemaining = currentTurnPlayer ? currentTurnPlayer.wallsRemaining > 0 : false;
+
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
       {/* Top Navigation */}
@@ -328,7 +351,8 @@ export default function App() {
               onMovePawn={handleMovePawn}
               onPlaceWall={handlePlaceWall}
               onInvalidAction={(msg) => showStatus(msg)}
-              disabled={isAiThinking || gameState.winner !== null}
+              disabled={isBoardDisabled}
+              draggedWallPreview={draggedBoardPreview}
             />
 
             {/* Player Dashboard */}
@@ -344,10 +368,81 @@ export default function App() {
                 setIsMuted(next);
               }}
               statusMessage={statusMessage}
+              orientationChoice={orientationChoice}
+              onSelectOrientation={setOrientationChoice}
+              onStartDrag={startDrag}
+              isDragging={dragState !== null}
             />
           </div>
         )}
       </main>
+
+      {/* Mobile Quick-Deploy Rampart Dock (Visible on Mobile Viewports during your turn) */}
+      {screen === 'match' && !gameState.winner && !isAiThinking && isMyTurn && hasWallsRemaining && (
+        <div className="lg:hidden fixed bottom-3 left-3 right-3 z-30 max-w-sm mx-auto glass-panel-blue rounded-2xl p-2.5 border-amber-500/50 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300 shrink-0">
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span>{currentTurnPlayer.wallsRemaining} Kot</span>
+            </div>
+
+            {/* Orientation buttons */}
+            <div className="flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-amber-500/30 text-[10px]">
+              <button
+                type="button"
+                onClick={() => setOrientationChoice('H')}
+                className={`px-2 py-1 rounded font-bold transition-all cursor-pointer ${
+                  orientationChoice === 'H' ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50' : 'text-slate-400'
+                }`}
+                title="Horizontal [—]"
+              >
+                ━ H
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrientationChoice('V')}
+                className={`px-2 py-1 rounded font-bold transition-all cursor-pointer ${
+                  orientationChoice === 'V' ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50' : 'text-slate-400'
+                }`}
+                title="Vertical [|]"
+              >
+                ┃ V
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrientationChoice('AUTO')}
+                className={`px-1.5 py-1 rounded font-bold transition-all cursor-pointer ${
+                  orientationChoice === 'AUTO' ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50' : 'text-slate-400'
+                }`}
+                title="Auto Detect"
+              >
+                Auto
+              </button>
+            </div>
+
+            {/* Drag Handle */}
+            <div
+              data-testid="mobile-dock-drag-wall"
+              role="button"
+              tabIndex={0}
+              onPointerDown={(e) => startDrag(e, gameState.turn)}
+              onTouchStart={(e) => startDrag(e, gameState.turn)}
+              style={{ touchAction: 'none' }}
+              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-md cursor-grab active:cursor-grabbing select-none transition-all ${
+                gameState.turn === 'blue'
+                  ? 'bg-gradient-to-r from-sky-600 to-sky-700 text-white border border-sky-400/60'
+                  : 'bg-gradient-to-r from-rose-600 to-rose-700 text-white border border-rose-400/60'
+              }`}
+            >
+              <GripHorizontal className="w-4 h-4 text-amber-300" />
+              <span>Drag Kot</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Touch/Pointer Drag Floating Overlay */}
+      <WallDragOverlay dragState={dragState} />
 
       {/* Online Lobby Modal */}
       {showOnlineLobby && (

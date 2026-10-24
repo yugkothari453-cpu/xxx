@@ -12,9 +12,11 @@ import {
   Sparkles,
   Sun,
   Flame,
+  GripHorizontal,
 } from 'lucide-react';
 import { GameMode, GameState, PlayerId, RoomState } from '../game/types';
 import { sound } from '../game/audio';
+import { DragOrientation } from '../game/useWallDrag';
 
 interface PlayerDashboardProps {
   gameState: GameState;
@@ -26,6 +28,10 @@ interface PlayerDashboardProps {
   isMuted: boolean;
   onToggleMute: () => void;
   statusMessage?: string;
+  orientationChoice: DragOrientation;
+  onSelectOrientation: (o: DragOrientation) => void;
+  onStartDrag: (e: React.PointerEvent | React.TouchEvent, player: PlayerId) => void;
+  isDragging?: boolean;
 }
 
 export const PlayerDashboard: React.FC<PlayerDashboardProps> = ({
@@ -38,6 +44,10 @@ export const PlayerDashboard: React.FC<PlayerDashboardProps> = ({
   isMuted,
   onToggleMute,
   statusMessage,
+  orientationChoice,
+  onSelectOrientation,
+  onStartDrag,
+  isDragging = false,
 }) => {
   const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
 
@@ -178,6 +188,86 @@ export const PlayerDashboard: React.FC<PlayerDashboardProps> = ({
                 />
               ))}
             </div>
+
+            {/* Draggable Shahi Rampart Deployer (Active on Blue Turn) */}
+            {isBlueTurn && gameState.players.blue.wallsRemaining > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-sky-800/40 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1">
+                    <GripHorizontal className="w-3 h-3 text-amber-400" />
+                    <span>Deploy Rampart</span>
+                  </span>
+                  {/* Orientation Switcher */}
+                  <div className="flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-amber-500/30">
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('H')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'H'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Horizontal [—]"
+                    >
+                      ━ H
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('V')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'V'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Vertical [|]"
+                    >
+                      ┃ V
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('AUTO')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'AUTO'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Auto Detect Corridor"
+                    >
+                      Auto
+                    </button>
+                  </div>
+                </div>
+
+                {/* Draggable Rampart Handle */}
+                <div
+                  data-testid="drag-wall-blue"
+                  role="button"
+                  tabIndex={0}
+                  onPointerDown={(e) => onStartDrag(e, 'blue')}
+                  onTouchStart={(e) => onStartDrag(e, 'blue')}
+                  style={{ touchAction: 'none' }}
+                  className={`w-full py-2 px-2.5 rounded-xl border border-sky-400/50 bg-gradient-to-r from-sky-900/60 via-slate-900/90 to-sky-950/70 hover:from-sky-800/60 hover:to-sky-900/60 cursor-grab active:cursor-grabbing transition-all select-none shadow-md flex items-center justify-between ${
+                    isDragging ? 'ring-2 ring-amber-400 shadow-[0_0_12px_#38bdf8]' : 'hover:border-amber-400/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-sky-500/30 border border-sky-400/50 flex items-center justify-center text-amber-300 shrink-0">
+                      <Shield className="w-3 h-3" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[11px] font-bold text-sky-200 font-royal flex items-center gap-1">
+                        <span>Drag Kot to Board</span>
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-sans font-semibold">
+                          {orientationChoice === 'H' ? '━ Horiz' : orientationChoice === 'V' ? '┃ Vert' : 'Auto'}
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-slate-400">Touch & drag onto arena corridors</div>
+                    </div>
+                  </div>
+                  <GripHorizontal className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -237,6 +327,86 @@ export const PlayerDashboard: React.FC<PlayerDashboardProps> = ({
                 />
               ))}
             </div>
+
+            {/* Draggable Shahi Rampart Deployer (Active on Crimson Turn) */}
+            {isCrimsonTurn && gameState.players.crimson.wallsRemaining > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-rose-800/40 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1">
+                    <GripHorizontal className="w-3 h-3 text-amber-400" />
+                    <span>Deploy Rampart</span>
+                  </span>
+                  {/* Orientation Switcher */}
+                  <div className="flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-amber-500/30">
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('H')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'H'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Horizontal [—]"
+                    >
+                      ━ H
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('V')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'V'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Vertical [|]"
+                    >
+                      ┃ V
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrientation('AUTO')}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        orientationChoice === 'AUTO'
+                          ? 'bg-amber-500/30 text-amber-300 border border-amber-400/50 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Auto Detect Corridor"
+                    >
+                      Auto
+                    </button>
+                  </div>
+                </div>
+
+                {/* Draggable Rampart Handle */}
+                <div
+                  data-testid="drag-wall-crimson"
+                  role="button"
+                  tabIndex={0}
+                  onPointerDown={(e) => onStartDrag(e, 'crimson')}
+                  onTouchStart={(e) => onStartDrag(e, 'crimson')}
+                  style={{ touchAction: 'none' }}
+                  className={`w-full py-2 px-2.5 rounded-xl border border-rose-400/50 bg-gradient-to-r from-rose-900/60 via-slate-900/90 to-rose-950/70 hover:from-rose-800/60 hover:to-rose-900/60 cursor-grab active:cursor-grabbing transition-all select-none shadow-md flex items-center justify-between ${
+                    isDragging ? 'ring-2 ring-amber-400 shadow-[0_0_12px_#fb7185]' : 'hover:border-amber-400/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-rose-500/30 border border-rose-400/50 flex items-center justify-center text-amber-300 shrink-0">
+                      <Shield className="w-3 h-3" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[11px] font-bold text-rose-200 font-royal flex items-center gap-1">
+                        <span>Drag Kot to Board</span>
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-sans font-semibold">
+                          {orientationChoice === 'H' ? '━ Horiz' : orientationChoice === 'V' ? '┃ Vert' : 'Auto'}
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-slate-400">Touch & drag onto arena corridors</div>
+                    </div>
+                  </div>
+                  <GripHorizontal className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -261,7 +431,11 @@ export const PlayerDashboard: React.FC<PlayerDashboardProps> = ({
           </div>
           <div className="flex items-start gap-2">
             <Shield className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
-            <span><strong>Erect Shahi Kot:</strong> Hover between rows for <strong>Horizontal [—]</strong>, or columns for <strong>Vertical [|]</strong>. Click directly to fortify!</span>
+            <span><strong>Mobile Drag & Drop:</strong> Touch & drag the <strong>Shahi Kot</strong> rampart from the side menu directly onto the board corridors to place your wall!</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <span><strong>Desktop Quick Fortify:</strong> Hover over corridors between tiles for <strong>Horizontal [—]</strong> or <strong>Vertical [|]</strong> and click.</span>
           </div>
         </div>
       </div>

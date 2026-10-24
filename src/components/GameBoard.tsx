@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { CellPosition, GameState, PlayerId, Wall, WallOrientation } from '../game/types';
 import { getLegalMoves, validateWallPlacement } from '../game/rules';
 import { sound } from '../game/audio';
+import { DraggedWallPreview } from '../game/useWallDrag';
 
 interface GameBoardProps {
   gameState: GameState;
@@ -10,6 +11,7 @@ interface GameBoardProps {
   onPlaceWall: (wall: Wall) => void;
   onInvalidAction: (message: string) => void;
   disabled?: boolean;
+  draggedWallPreview?: DraggedWallPreview | null;
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({
@@ -19,6 +21,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onPlaceWall,
   onInvalidAction,
   disabled = false,
+  draggedWallPreview = null,
 }) => {
   const [hoveredWall, setHoveredWall] = useState<{
     row: number;
@@ -264,6 +267,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         onContextMenu={handleContextMenu}
       >
         <svg
+          id="game-board-svg"
           ref={svgRef}
           data-testid="game-board-svg"
           viewBox="0 0 540 540"
@@ -535,8 +539,84 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             );
           })}
 
+          {/* Dragged Wall Preview Ghost from Touch/Pointer Drag */}
+          {draggedWallPreview && (() => {
+            const isHorizontal = draggedWallPreview.orientation === 'H';
+            const wallWidth = isHorizontal ? cellSize * 2 + gap : gap;
+            const wallHeight = isHorizontal ? gap : cellSize * 2 + gap;
+
+            const wx = isHorizontal
+              ? margin + draggedWallPreview.col * step
+              : margin + draggedWallPreview.col * step + cellSize;
+            const wy = isHorizontal
+              ? margin + draggedWallPreview.row * step + cellSize
+              : margin + draggedWallPreview.row * step;
+
+            const isValid = draggedWallPreview.isValid;
+            const previewFill = isValid
+              ? gameState.turn === 'blue'
+                ? 'rgba(14, 165, 233, 0.9)'
+                : 'rgba(225, 29, 72, 0.9)'
+              : 'rgba(239, 68, 68, 0.8)';
+
+            const previewStroke = isValid ? '#fde047' : '#f87171';
+
+            return (
+              <g
+                className="pointer-events-none transition-all"
+                style={{
+                  filter: isValid
+                    ? gameState.turn === 'blue'
+                      ? 'drop-shadow(0 0 16px rgba(56, 189, 248, 1))'
+                      : 'drop-shadow(0 0 16px rgba(251, 113, 133, 1))'
+                    : 'drop-shadow(0 0 12px rgba(239, 68, 68, 1))',
+                }}
+              >
+                <rect
+                  x={wx}
+                  y={wy}
+                  width={wallWidth}
+                  height={wallHeight}
+                  rx={5}
+                  fill={previewFill}
+                  stroke={previewStroke}
+                  strokeWidth={2.5}
+                  strokeDasharray={isValid ? undefined : '5 3'}
+                  className="animate-pulse"
+                />
+                {isValid ? (
+                  <g>
+                    <circle
+                      cx={wx + wallWidth / 2}
+                      cy={wy + wallHeight / 2}
+                      r={4.5}
+                      fill="#fef08a"
+                      stroke="#92400e"
+                      strokeWidth={1}
+                    />
+                    <circle
+                      cx={wx + wallWidth / 2}
+                      cy={wy + wallHeight / 2}
+                      r={2}
+                      fill={gameState.turn === 'blue' ? '#0284c7' : '#e11d48'}
+                    />
+                  </g>
+                ) : (
+                  <line
+                    x1={wx + 6}
+                    y1={wy + 6}
+                    x2={wx + wallWidth - 6}
+                    y2={wy + wallHeight - 6}
+                    stroke="#fca5a5"
+                    strokeWidth={2}
+                  />
+                )}
+              </g>
+            );
+          })()}
+
           {/* Auto Hover Preview Ghost Shahi Rampart */}
-          {hoveredWall && isMyTurn && hasWallsRemaining && (() => {
+          {!draggedWallPreview && hoveredWall && isMyTurn && hasWallsRemaining && (() => {
             const isHorizontal = hoveredWall.orientation === 'H';
             const wallWidth = isHorizontal ? cellSize * 2 + gap : gap;
             const wallHeight = isHorizontal ? gap : cellSize * 2 + gap;
