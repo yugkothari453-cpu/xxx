@@ -1,4 +1,4 @@
-import { GameAction, PlayerId, RoomState } from './types';
+import { GameAction, GameState, PlayerId, RoomState } from './types';
 import { applyAction, createInitialGameState } from './rules';
 
 export interface RoomConnection {
@@ -390,7 +390,7 @@ export class OnlineClient {
     roomId: string,
     token: string,
     action: GameAction
-  ): Promise<void> {
+  ): Promise<GameState> {
     if (this.usingFallback) {
       const room = this.fallbackSync.getRoom(roomId);
       if (!room) throw new Error('Chamber not found');
@@ -403,7 +403,7 @@ export class OnlineClient {
       room.gameState = result.state;
       room.lastActiveAt = Date.now();
       this.fallbackSync.saveRoom(room);
-      return;
+      return room.gameState;
     }
 
     try {
@@ -417,6 +417,9 @@ export class OnlineClient {
         const err = await res.json().catch(() => ({ error: 'Action failed' }));
         throw new Error(err.error || 'Action failed');
       }
+
+      const data = await res.json();
+      return data.gameState;
     } catch (e) {
       // If server unreachable, check fallback
       const room = this.fallbackSync.getRoom(roomId);
@@ -427,7 +430,7 @@ export class OnlineClient {
           room.gameState = result.state;
           room.lastActiveAt = Date.now();
           this.fallbackSync.saveRoom(room);
-          return;
+          return room.gameState;
         }
       }
       throw e;

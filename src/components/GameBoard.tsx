@@ -231,15 +231,29 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     <div className="relative flex flex-col items-center select-none w-full max-w-[540px]">
       {/* Auto-Orientation Guidance Banner */}
       <div className="w-full flex items-center justify-between px-2 mb-2 text-xs">
-        <div className="text-[11px] text-amber-200/80 flex items-center gap-2">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-[0_0_6px_#f59e0b]" />
-            Click gold marker to advance
-          </span>
-          <span className="text-amber-500/40">·</span>
-          <span>Hover corridors for <strong>Shahi Rampart (Kot)</strong></span>
+        <div className="text-[11px] text-amber-200/90 flex items-center gap-2">
+          {myPlayerRole !== null ? (
+            isMyTurn ? (
+              <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_#34d399] animate-pulse" />
+                <span>Your Turn ({myPlayerRole === 'blue' ? 'Mayura' : 'Suryavanshi'}) — Click any gold gemstone to march</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-amber-400/50 inline-block" />
+                <span>Awaiting rival's move ({gameState.turn === 'blue' ? 'Mayura' : 'Suryavanshi'})...</span>
+              </span>
+            )
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-[0_0_6px_#f59e0b]" />
+              <span>Click gold gemstone to march pawn</span>
+              <span className="text-amber-500/40">·</span>
+              <span>Hover corridors for <strong>Shahi Kot</strong></span>
+            </span>
+          )}
         </div>
-        <div className="text-[10px] font-bold tracking-wider uppercase text-amber-300 bg-amber-500/15 border border-amber-400/40 px-2 py-0.5 rounded-full shadow-xs">
+        <div className="text-[10px] font-bold tracking-wider uppercase text-amber-300 bg-amber-500/15 border border-amber-400/40 px-2 py-0.5 rounded-full shadow-xs shrink-0">
           Auto H / V
         </div>
       </div>
@@ -350,7 +364,26 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               }
 
               return (
-                <g key={`cell_${r}_${c}`}>
+                <g
+                  key={`cell_${r}_${c}`}
+                  className={isLegal && isMyTurn ? 'cursor-pointer' : undefined}
+                  role={isLegal && isMyTurn ? 'button' : undefined}
+                  aria-label={isLegal && isMyTurn ? `March to row ${r + 1}, column ${c + 1}` : undefined}
+                  onClick={(e) => {
+                    if (!isMyTurn) return;
+                    e.stopPropagation();
+                    if (isLegal) {
+                      onMovePawn({ row: r, col: c });
+                      setHoveredWall(null);
+                    } else {
+                      const myPos = gameState.players[gameState.turn].position;
+                      if (r !== myPos.row || c !== myPos.col) {
+                        onInvalidAction('Illegal move. Choose a glowing royal gemstone marker.');
+                        sound.playInvalid();
+                      }
+                    }
+                  }}
+                >
                   {/* Marble Tile */}
                   <rect
                     data-cell-row={r}

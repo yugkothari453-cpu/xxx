@@ -45,6 +45,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
 
   const searchTimerRef = useRef<number | null>(null);
   const currentConnRef = useRef<RoomConnection | null>(null);
+  const hasLaunchedRef = useRef<boolean>(false);
   currentConnRef.current = roomConnection;
 
   // Auto-start random matchmaking if initialMode is 'random'
@@ -77,9 +78,13 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     };
   }, [activeTab]);
 
-  // Clean up any pending room or SSE on unmount
+  // Clean up only if leaving lobby WITHOUT launching an active match
   useEffect(() => {
     return () => {
+      if (hasLaunchedRef.current) {
+        // Match actively launched; keep SSE subscription & room alive!
+        return;
+      }
       const conn = currentConnRef.current;
       if (conn && conn.room.isRandomMatch) {
         onlineClient.cancelMatchmaking(conn.room.id, conn.playerToken);
@@ -100,6 +105,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
 
       if (result.matched) {
         // Paired immediately as Crimson with an already waiting Blue!
+        hasLaunchedRef.current = true;
         sound.playVictory();
         onRoomReady(result.connection);
       } else {
@@ -108,6 +114,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
           result.connection.room.id,
           (updatedRoom) => {
             if (updatedRoom.players.crimson && updatedRoom.players.crimson.connected) {
+              hasLaunchedRef.current = true;
               sound.playVictory();
               onRoomReady({
                 room: updatedRoom,
@@ -153,6 +160,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
         conn.room.id,
         (updatedRoom) => {
           if (updatedRoom.players.crimson && updatedRoom.players.crimson.connected) {
+            hasLaunchedRef.current = true;
             sound.playVictory();
             onRoomReady({
               room: updatedRoom,
@@ -188,6 +196,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
         undefined,
         playerName || 'Crimson Kingdom (Suryavanshi)'
       );
+      hasLaunchedRef.current = true;
       sound.playVictory();
       onRoomReady(conn);
     } catch (e: unknown) {

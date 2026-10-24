@@ -104,29 +104,39 @@ export default function App() {
 
   // Online Room Ready callback
   const handleRoomReady = (conn: RoomConnection) => {
-    setOnlineConnection(conn);
+    const readyGameState: GameState = {
+      ...conn.room.gameState,
+      status: 'in_progress',
+    };
+
+    setOnlineConnection({
+      ...conn,
+      room: {
+        ...conn.room,
+        gameState: readyGameState,
+      },
+    });
     setGameMode('online');
     setMyPlayerRole(conn.playerRole);
-    setGameState(conn.room.gameState);
+    setGameState(readyGameState);
     setShowOnlineLobby(false);
     setScreen('match');
 
-    // Subscribe to live room updates via SSE
+    // Subscribe to live room updates via SSE & broadcast
     onlineClient.subscribe(
       conn.room.id,
       (updatedRoom) => {
-        setGameState(updatedRoom.gameState);
-        if (updatedRoom.gameState.winner) {
-          // Finished
+        if (updatedRoom && updatedRoom.gameState) {
+          setGameState(updatedRoom.gameState);
         }
       },
       (err) => {
-        showStatus(`Online sync error: ${err}`);
+        showStatus(`Online sync notice: ${err}`);
       }
     );
   };
 
-  // Handle local pawn move
+  // Handle pawn move
   const handleMovePawn = (to: CellPosition) => {
     const action: GameAction = {
       type: 'move',
@@ -136,12 +146,27 @@ export default function App() {
     };
 
     if (gameMode === 'online' && onlineConnection) {
-      onlineClient.sendAction(onlineConnection.room.id, onlineConnection.playerToken, action).then(() => {
+      // 1. Validate and apply optimistic local move immediately
+      const prevGameState = gameState;
+      const optimistic = applyAction(gameState, action);
+      if (optimistic.valid) {
         sound.playPawnMove();
-      }).catch((err) => {
-        sound.playInvalid();
-        showStatus(err.message || 'Move failed');
-      });
+        setGameState(optimistic.state);
+      }
+
+      // 2. Transmit to server / peers
+      onlineClient.sendAction(onlineConnection.room.id, onlineConnection.playerToken, action)
+        .then((serverState) => {
+          if (serverState) {
+            setGameState(serverState);
+          }
+        })
+        .catch((err) => {
+          // Rollback on server error
+          setGameState(prevGameState);
+          sound.playInvalid();
+          showStatus(err.message || 'Move failed');
+        });
       return;
     }
 
@@ -165,12 +190,24 @@ export default function App() {
     };
 
     if (gameMode === 'online' && onlineConnection) {
-      onlineClient.sendAction(onlineConnection.room.id, onlineConnection.playerToken, action).then(() => {
+      const prevGameState = gameState;
+      const optimistic = applyAction(gameState, action);
+      if (optimistic.valid) {
         sound.playWallPlacement();
-      }).catch((err) => {
-        sound.playInvalid();
-        showStatus(err.message || 'Wall placement failed');
-      });
+        setGameState(optimistic.state);
+      }
+
+      onlineClient.sendAction(onlineConnection.room.id, onlineConnection.playerToken, action)
+        .then((serverState) => {
+          if (serverState) {
+            setGameState(serverState);
+          }
+        })
+        .catch((err) => {
+          setGameState(prevGameState);
+          sound.playInvalid();
+          showStatus(err.message || 'Wall placement failed');
+        });
       return;
     }
 

@@ -315,9 +315,16 @@ apiRouter.post('/rooms/:id/action', (req: Request, res: Response) => {
   if (room.players.blue.token === token) role = 'blue';
   else if (room.players.crimson?.token === token) role = 'crimson';
 
-  if (!role || action.player !== role) {
-    res.status(403).json({ error: 'Forbidden: action player does not match credentials.' });
+  if (!role) {
+    res.status(403).json({ error: 'Forbidden: invalid player credentials.' });
     return;
+  }
+
+  // Ensure action player matches the authenticated role
+  action.player = role;
+
+  if (room.players.blue.connected && room.players.crimson && room.gameState.status === 'waiting') {
+    room.gameState.status = 'in_progress';
   }
 
   const result = applyAction(room.gameState, action);
